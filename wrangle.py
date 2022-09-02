@@ -26,7 +26,7 @@ from sklearn.metrics import classification_report, confusion_matrix, accuracy_sc
 from sklearn.tree import DecisionTreeClassifier, plot_tree
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.neighbors import KNeighborsClassifier
-from sklearn.linear_model import LogisticRegression
+from sklearn.linear_model import Logisticssion
 
 # --------------------------------------------------
 '''Establishing a overarching SQL server contact method'''
@@ -77,16 +77,51 @@ def wrangle_7(df):
     return df
 
 
-def prep_zillow(df):
-    wrangle_zillow(df)
-    df.rename(columns={'bedroomcnt': 'bedrooms', 
-                       'bathroomcnt': 'bathrooms', 
-                       'calculatedfinishedsquarefeet': 'f_sqft', 
-                       'taxvaluedollarcnt': 'tax_value'}
-    return df
+#def prep_zillow(df):
+#    wrangle_zillow(df)
+#    df.rename(columns={'bedroomcnt': 'bedrooms', 
+#                       'bathroomcnt': 'bathrooms', 
+#                       'calculatedfinishedsquarefeet': 'f_sqft', 
+#                       'taxvaluedollarcnt': 'tax_value'}
+#    return df
 
+def scale_data(train, 
+               validate, 
+               test, 
+               columns=['bedrooms', 'bathrooms', 'tax_value', 'f_sqft', 'taxamount'],
+               return_scaler=False):
+    '''
+    Scales train, validate, test and returns scaled versions of each 
+    If return_scalar is True, the scaler object will be returned as well
+    '''
+    # make copies
+    train_scaled = train.copy()
+    validate_scaled = validate.copy()
+    test_scaled = test.copy()
+    # Make the scaler
+    scaler = MinMaxScaler()
+    # Fit it
+    scaler.fit(train[columns])
+    # Apply the scaler:
+    train_scaled[columns] = pd.DataFrame(scaler.transform(train[columns]),
+                                                  columns=train[columns].columns.values).set_index([train.index.values])
+                                                  
+    validate_scaled[columns] = pd.DataFrame(scaler.transform(validate[columns]),
+                                                  columns=validate[columns].columns.values).set_index([validate.index.values])
+    
+    test_scaled[columns] = pd.DataFrame(scaler.transform(test[columns]),
+                                                 columns=test[columns].columns.values).set_index([test.index.values])
+    
+    if return_scaler:
+        return scaler, train_scaled, validate_scaled, test_scaled
+    else:
+        return train_scaled, validate_scaled, test_scaled
+
+              
 # --------------------------------------------------
 
+'''Iris Data'''
+              
 def prep_iris(iris_db):
     iris_db = iris_db.rename(columns={'species_name':'species'})
     iris_db = iris_db.replace({'species' : { 'setosa' : 1, 'versicolor' : 2, 'virginica' : 3 }})
@@ -95,6 +130,7 @@ def prep_iris(iris_db):
 
 # --------------------------------------------------
 
+'''Telco Data'''              
 # I have two Telco .csv somehow, so I have separate functions to prep each
 
 def prep_telco(telco_db):
@@ -163,8 +199,34 @@ def prep_titanic(titanic_db):
 
 # --------------------------------------------------
 
+'''Best Predictors'''
 
-# --------------------------------------------------
+
+'''Determines the best predictors of your target and returns the column names of the best predictors and a sample dataframe'''
+def select_kbest(X_train, y_train, k):
+    # create the model
+    kbest = SelectKBest(f_regression, k=k)
+    # Fit the model
+    kbest.fit(X_train, y_train)
+    # df of the top predictors
+    X_train_transformed = pd.DataFrame(kbest.transform(X_train),
+                                       columns=X_train.columns[kbest.get_support()],
+                                       index=X_train.index)
+    
+    return X_train.columns[kbest.get_support()],X_train_transformed.head(3)
+
+def rfe(X_train, y_train, k):
+    model = LinearRegression()
+    # Make the model
+    rfe = RFE(model, n_features_to_select=k)
+    # Fit the model
+    rfe.fit(X_train, y_train)
+    # df of the top predictors
+    X_train_transformed = pd.DataFrame(rfe.transform(X_train), 
+                                       index= X_train.index, 
+                                       columns=X_train.columns[rfe.support_])
+    
+    return X_train.columns[rfe.support_], X_train_transformed.head(3)
 
 
 # --------------------------------------------------
@@ -186,3 +248,22 @@ def test(df, col, col2):
 # --------------------------------------------------
 # print("The bold text is",'\033[1m' + 'Python' + '\033[0m')        
 # '\033[1m' + 'TEXT' + '\033[0m'
+# --------------------------------------------------
+
+'''Student Grade data'''
+def wrangle_grades():
+    """
+    Read student_grades csv file into a pandas DataFrame,
+    drop student_id column, replace whitespaces with NaN values,
+    drop any rows with Null values, convert all columns to int64,
+    return cleaned student grades DataFrame.
+    """
+    # Acquire data from csv file.
+    grades = pd.read_csv("student_grades.csv")
+    # Replace white space values with NaN values.
+    grades = grades.replace(r"^\s*$", np.nan, regex=True)
+    # Drop all rows with NaN values.
+    df = grades.dropna()
+    # Convert all columns to int64 data types.
+    df = df.astype("int")
+    return df
